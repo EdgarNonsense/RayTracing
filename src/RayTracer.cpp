@@ -49,7 +49,7 @@ void RayTracer::init(int scene_id) {
 
 Ray RayTracer::ray_thru_pixel(int i, int j) {
     /**
-     * This function generated a ray passing through camera origin
+     * This function generates a ray passing through camera origin
      * and pixel (i, j)
      */
 
@@ -61,25 +61,25 @@ Ray RayTracer::ray_thru_pixel(int i, int j) {
     ray.p0 = glm::vec3(camera.eye);
 
     /**
-     * TODO: Task 1.2
-     * Randomly sample x and y inside pixel(i, j)
+     * Compute the direction of the ray using perspective projection
+     * and ensuring correct aspect ratio
      */
-    float x = 0.5f;
-    float y = 0.5f;
+    float aspect_ratio = static_cast<float>(camera.width) / camera.height;
+    float fov_scale = tan(radians(camera.fov) * 0.5f);
 
-    /**
-     * TODO: Task 1.1
-     * calculate and assign direction to ray which is passoing
-     * through current pixel (i, j)
-     */
-    float alpha = 0.0f;  // TODO: Implement this
-    float beta = 0.0f;   // TODO: Implement this
+    // Centering the ray within the pixel
+    float x = (i + 0.5f) / camera.width;
+    float y = (j + 0.5f) / camera.height;
+
+    // Transform to NDC space [-1, 1]
+    float alpha = (2.0f * x - 1.0f) * aspect_ratio * fov_scale;
+    float beta = (1.0f - 2.0f * y) * fov_scale;
 
     vec3 u(camera.cameraMatrix[0]);
     vec3 v(camera.cameraMatrix[1]);
     vec3 w(camera.cameraMatrix[2]);
 
-    ray.dir = vec3(-1.0f);  // TODO: Implement this
+    ray.dir = normalize(alpha * u + beta * v - w);
 
     return ray;
 }
