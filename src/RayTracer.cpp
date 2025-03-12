@@ -10,11 +10,14 @@
 #include <GL/glut.h>
 #endif
 
+#include <atomic>
+#include <condition_variable>
 #include <glm/glm.hpp>
 #include <glm/gtc/random.hpp>
 #include <glm/gtx/string_cast.hpp>
 #include <glm/gtx/transform.hpp>
 #include <iostream>
+#include <mutex>
 #include <queue>
 #include <random>
 #include <thread>
@@ -42,66 +45,65 @@ void RayTracer::init(int scene_id) {
         scene = std::unique_ptr<Scene>(open_sky());
     else {
         std::cout << "Invalid <scene_id> " << scene_id << " given" << std::endl;
-        std::cout << "Valid <scene_id> values are 1, 2, 3" << std::endl;
         exit(1);
     }
 }
 
+
 Ray RayTracer::ray_thru_pixel(int i, int j) {
-    /**
-     * This function generated a ray passing through camera origin
-     * and pixel (i, j)
-     */
+            /**
+             * This function generated a ray passing through camera origin
+             * and pixel (i, j)
+             */
 
-    Ray ray;
-    ray.pixel_x_coordinate = i;
-    ray.pixel_y_coordinate = j;
+            Ray ray;
+            ray.pixel_x_coordinate = i;
+            ray.pixel_y_coordinate = j;
 
-    // p0
-    ray.p0 = glm::vec3(camera.eye);
+            // p0
+            ray.p0 = glm::vec3(camera.eye);
 
-    /**
-     * TODO: Task 1.2
-     * Randomly sample x and y inside pixel(i, j)
-     */
-     // float x = 0.5f;
-     // float y = 0.5f;
-    float x = glm::linearRand(0.0f, 1.0f);
-    float y = glm::linearRand(0.0f, 1.0f);
+            /**
+             * TODO: Task 1.2
+             * Randomly sample x and y inside pixel(i, j)
+             */
+             // float x = 0.5f;
+             // float y = 0.5f;
+            float x = glm::linearRand(0.0f, 1.0f);
+            float y = glm::linearRand(0.0f, 1.0f);
 
-    /**
-     * TODO: Task 1.1
-     * calculate and assign direction to ray which is passoing
-     * through current pixel (i, j)
-     */
-     // float alpha = 0.0f;  // TODO: Implement this
-     // float beta = 0.0f;   // TODO: Implement this
-     // float alpha = 2.0f * ((i + x) / image.width) - 1.0f;
-     // float beta  = 1.0f - 2.0f * ((j + y) / image.height);
-    float aspect_ratio = static_cast<float>(image.width) / image.height;
-    // float fov_scale = tan(glm::radians(camera.fovy) / 2.0f);
-    float fov_scale = tan(camera.fovy / 2.0f);
+            /**
+             * TODO: Task 1.1
+             * calculate and assign direction to ray which is passoing
+             * through current pixel (i, j)
+             */
+             // float alpha = 0.0f;  // TODO: Implement this
+             // float beta = 0.0f;   // TODO: Implement this
+             // float alpha = 2.0f * ((i + x) / image.width) - 1.0f;
+             // float beta  = 1.0f - 2.0f * ((j + y) / image.height);
+            float aspect_ratio = static_cast<float>(image.width) / image.height;
+            // float fov_scale = tan(glm::radians(camera.fovy) / 2.0f);
+            float fov_scale = tan(camera.fovy / 2.0f);
 
-    float alpha = (2.0f * ((i + x) / image.width) - 1.0f) * aspect_ratio * fov_scale;
-    float beta = (1.0f - 2.0f * ((j + y) / image.height)) * fov_scale;
+            float alpha = (2.0f * ((i + x) / image.width) - 1.0f) * aspect_ratio * fov_scale;
+            float beta = (1.0f - 2.0f * ((j + y) / image.height)) * fov_scale;
 
-    // float alpha = (2.0f * ((x) / image.width) - 1.0f) * aspect_ratio * fov_scale;
-    // float beta  = (1.0f - 2.0f * ((y) / image.height)) * fov_scale;
+            // float alpha = (2.0f * ((x) / image.width) - 1.0f) * aspect_ratio * fov_scale;
+            // float beta  = (1.0f - 2.0f * ((y) / image.height)) * fov_scale;
 
-    // float alpha = (2.0f * ((i + x) / image.width) - 1.0f) * aspect_ratio;
-    // float beta  = (1.0f - 2.0f * ((j + y) / image.height));
+            // float alpha = (2.0f * ((i + x) / image.width) - 1.0f) * aspect_ratio;
+            // float beta  = (1.0f - 2.0f * ((j + y) / image.height));
 
 
-    vec3 u(camera.cameraMatrix[0]);
-    vec3 v(camera.cameraMatrix[1]);
-    vec3 w(camera.cameraMatrix[2]);
+            vec3 u(camera.cameraMatrix[0]);
+            vec3 v(camera.cameraMatrix[1]);
+            vec3 w(camera.cameraMatrix[2]);
 
-    // ray.dir = vec3(-1.0f);  // TODO: Implement this
-    ray.dir = glm::normalize(alpha * u + beta * v - w);
+            // ray.dir = vec3(-1.0f);  // TODO: Implement this
+            ray.dir = glm::normalize(alpha * u + beta * v - w);
 
-    return ray;
-}
-
+            return ray;
+        }
 void RayTracer::set_shading_mode(ShadingMode shading_mode) {
     // Update shading mode for both ray tracer and scene
     this->shading_mode = shading_mode;
@@ -133,7 +135,7 @@ void RayTracer::trace_ray_thread_callback(
         // Wait until there is work available or no rays remain in-flight.
         cond_var.wait(queue_lock, [&]() {
             return !wip_queue.empty() || active_rays.load() == 0;
-        });
+            });
 
         // Terminate if no rays remain
         if (wip_queue.empty() && active_rays.load() == 0)
@@ -151,10 +153,10 @@ void RayTracer::trace_ray_thread_callback(
         {
             std::unique_lock<std::mutex> image_lock(imageMutex);
             glm::vec3 ray_color = (this->shading_mode == ShadingMode::DEBUG)
-                                      ? ray.debug_color
-                                      : ray.color;
+                ? ray.debug_color
+                : ray.color;
             glm::vec3 color = image.getPixel(ray.pixel_x_coordinate, ray.pixel_y_coordinate) +
-                              ray_color / static_cast<float>(active_samples_per_pixel);
+                ray_color / static_cast<float>(active_samples_per_pixel);
             image.updatePixel(ray.pixel_x_coordinate, ray.pixel_y_coordinate, color);
             processed_ray_count++;
         }
@@ -164,7 +166,8 @@ void RayTracer::trace_ray_thread_callback(
         if (ray.n_bounces < active_max_bounces && ray.isWip) {
             wip_queue.push(ray);
             cond_var.notify_one();
-        } else {
+        }
+        else {
             // Ray is finished: decrement active_rays.
             active_rays--;
             cond_var.notify_all();  // wake up waiting threads in case this was the last ray.
@@ -218,7 +221,8 @@ void RayTracer::draw() {
          */
         active_samples_per_pixel = samples_per_pixel;  // TODO: Hardcode this value to 1 once Task 3 is complete
         active_max_bounces = 1;
-    } else {
+    }
+    else {
         active_samples_per_pixel = samples_per_pixel;
         active_max_bounces = max_bounces;
     }
@@ -239,10 +243,10 @@ void RayTracer::draw() {
     // Launch producer thread to enqueue initial rays.
     threads.emplace_back(
         std::thread(&RayTracer::init_rays_thread_callback, this,
-                    std::ref(wip_queue),
-                    std::ref(queueMutex),
-                    std::ref(cond_var),
-                    std::ref(active_rays)));
+            std::ref(wip_queue),
+            std::ref(queueMutex),
+            std::ref(cond_var),
+            std::ref(active_rays)));
 
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
@@ -251,15 +255,15 @@ void RayTracer::draw() {
     for (int i = 0; i < num_threads; i++) {
         threads.emplace_back(
             std::thread(&RayTracer::trace_ray_thread_callback, this,
-                        std::ref(wip_queue),
-                        std::ref(image),
-                        std::ref(*scene),
-                        std::ref(queueMutex),
-                        std::ref(imageMutex),
-                        std::ref(cond_var),
-                        active_samples_per_pixel,
-                        std::ref(processed_ray_count),
-                        std::ref(active_rays)));
+                std::ref(wip_queue),
+                std::ref(image),
+                std::ref(*scene),
+                std::ref(queueMutex),
+                std::ref(imageMutex),
+                std::ref(cond_var),
+                active_samples_per_pixel,
+                std::ref(processed_ray_count),
+                std::ref(active_rays)));
     }
 
     unsigned int frame_update_count = 0;
@@ -287,5 +291,5 @@ void RayTracer::draw() {
     refresh_display(imageMutex);
 
     std::cout << std::endl
-              << "Done! " << processed_ray_count << " rays processed" << std::endl;
+        << "Done! " << processed_ray_count << " rays processed" << std::endl;
 }

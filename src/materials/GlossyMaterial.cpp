@@ -8,13 +8,13 @@
 
 using namespace glm;
 
-Ray GlossyMaterial::sample_ray_and_update_radiance(Ray &ray, Intersection &intersection) {
+Ray GlossyMaterial::sample_ray_and_update_radiance(Ray& ray, Intersection& intersection) {
     /**
      * Calculate the next ray after intersection with the model.
      * This will be used for recursive ray tracing.
      */
 
-    // Decide if diffuse or specular reflection
+     // Decide if diffuse or specular reflection
     float random = linearRand(0.0f, 1.0f);
     vec3 normal = intersection.normal;
     vec3 point = intersection.point;
@@ -26,17 +26,19 @@ Ray GlossyMaterial::sample_ray_and_update_radiance(Ray &ray, Intersection &inter
          * TODO: Task 6.1
          * Implement cosine-weighted hemisphere sampling
          */
-        // cosin sample next ray
+
+         // Cosine-weighted hemisphere sampling
         float s = linearRand(0.0f, 1.0f);
         float t = linearRand(0.0f, 1.0f);
+        float u = sqrt(1.0f - s);
+        float v = 2.0f * pi<float>() * t;
+        vec3 hemisphere_sample = vec3(
+            u * cos(v),
+            u * sin(v),
+            sqrt(s)
+        );
 
-        // TODO: Update u, v based on Equation (8) in handout
-        float u = 0.0f;
-        float v = 0.0f;
-
-        vec3 hemisphere_sample = vec3(0.0f);  // TODO: Update value to cosine-weighted sampled direction
-
-        // The direction we sampled above is in local co-ordinate frame
+        // The direction we sampled above is in local coordinate frame
         // we need to align it with the surface normal
         vec3 new_dir = align_with_normal(hemisphere_sample, normal);
 
@@ -46,7 +48,7 @@ Ray GlossyMaterial::sample_ray_and_update_radiance(Ray &ray, Intersection &inter
          * Note:
          * - C_diffuse = `this->diffuse`
          */
-        vec3 W_diffuse = vec3(0.0f);  // TODO: Calculate the radiance for current bounce
+        vec3 W_diffuse = diffuse / pi<float>();
 
         // update radiance
         ray.W_wip = ray.W_wip * W_diffuse;
@@ -67,7 +69,7 @@ Ray GlossyMaterial::sample_ray_and_update_radiance(Ray &ray, Intersection &inter
      * TODO: Task 6.2
      * Calculate the perfect mirror reflection direction
      */
-    vec3 reflection_dir = vec3(0.0f);  // TODO: Update with reflection direction
+    vec3 reflection_dir = reflect(ray.dir, normal);
 
     // Step 2: Calculate radiance
     /**
@@ -75,7 +77,7 @@ Ray GlossyMaterial::sample_ray_and_update_radiance(Ray &ray, Intersection &inter
      * Note:
      * - C_specular = `this->specular`
      */
-    vec3 W_specular = vec3(0.0f);  // TODO: Calculate the radiance for current bounce
+    vec3 W_specular = specular;
 
     // update radiance
     ray.W_wip = ray.W_wip * W_specular;
@@ -87,11 +89,13 @@ Ray GlossyMaterial::sample_ray_and_update_radiance(Ray &ray, Intersection &inter
     return ray;
 }
 
+
 glm::vec3 GlossyMaterial::get_direct_lighting(Intersection& intersection, Scene const& scene) {
     using namespace glm;
+    vec3 cumulative_direct_light = vec3(0.0f);
 
-    vec3 cummulative_direct_light = vec3(0.0f);
     for (unsigned int idx = 0; idx < scene.light_sources.size(); idx++) {
+        // Skip if the intersection is on the light source itself
         if (scene.light_sources[idx] == intersection.model)
             continue;
 
@@ -100,42 +104,47 @@ glm::vec3 GlossyMaterial::get_direct_lighting(Intersection& intersection, Scene 
 
         // Shadow Ray
         Ray shadow_ray;
-        shadow_ray.p0 = intersection.point + 0.01f * intersection.normal; // Offset to avoid self-shadowing
+        shadow_ray.p0 = intersection.point + 0.001f * intersection.normal; // Small offset to avoid self-intersection
         shadow_ray.dir = light_dir;
+        shadow_ray.intersections.clear();
 
-        // Intersect with all models for shadow check
+        // Cast shadow ray to check visibility
         for (unsigned int i = 0; i < scene.models.size(); i++) {
             scene.models[i]->intersect(shadow_ray);
         }
 
-        // Find closest intersection for shadow check
-        Intersection closest_intersection;
-        closest_intersection.t = std::numeric_limits<float>::max();
+        // Check visibility by finding closest intersection
+        bool light_visible = true;
+        float distance_to_light = length(light_pos - intersection.point);
+
         for (unsigned int i = 0; i < shadow_ray.intersections.size(); i++) {
-            if (shadow_ray.intersections[i].t < closest_intersection.t) {
-                closest_intersection = shadow_ray.intersections[i];
+            // If there's an intersection that's not the light source and it's closer than the light, then light is blocked
+            if (shadow_ray.intersections[i].model != scene.light_sources[idx] &&
+                shadow_ray.intersections[i].t < distance_to_light) {
+                light_visible = false;
+                break;
             }
         }
 
-        // Check if light is visible (not blocked)
-        if (closest_intersection.model == scene.light_sources[idx]) {
+        // Only add light contribution if light is visible
+        if (light_visible) {
             vec3 light_emission = scene.light_sources[idx]->material->emission;
-
-            // Diffuse Lighting Calculation (Equation 3)
-            float cos_theta = max(dot(intersection.normal, light_dir), 0.0f);
-            float distance_to_light = length(light_pos - intersection.point);
             float attenuation_factor = scene.light_sources[idx]->material->get_light_attenuation_factor(distance_to_light);
 
-            vec3 direct_light = diffuse * light_emission * cos_theta / attenuation_factor;
+            // Compute L_ℓ/attenuation_ℓ term
+            vec3 attenuated_light = light_emission / attenuation_factor;
 
-            cummulative_direct_light += direct_light;
+            // Compute max(l_ℓ · n, 0) term (cosine of angle between light direction and normal)
+            float cos_theta = max(dot(intersection.normal, light_dir), 0.0f);
+
+            // Add this light's contribution to the cumulative direct lighting
+            cumulative_direct_light += attenuated_light * cos_theta;
         }
     }
 
-    return cummulative_direct_light;
+    // Return L_direct which will be multiplied by C_diffuse in color_of_last_bounce()
+    return cumulative_direct_light;
 }
-
-
 
 vec3 GlossyMaterial::color_of_last_bounce(Ray &ray, Intersection &intersection, Scene const &scene) {
     using namespace glm;
